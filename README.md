@@ -1,5 +1,9 @@
 # Docker 실습 15선 — 방문 카운터로 배우는 컨테이너
 
+[1. Docker 개요 - Linux Kernel & UnionFS PPT Link](https://docs.google.com/presentation/d/1ARTknok8VZFPt-EZl-39twW4jAqSPe5o/edit?usp=drive_link&ouid=106914655275977610500&rtpof=true&sd=true) 
+
+[2. Docker 활용 - 네트워크 및 Volume PPT Link](https://docs.google.com/presentation/d/1lOg2LuNjbiXeg0uVQlAzYt6w78iIxKdw/edit?usp=drive_link&ouid=106914655275977610500&rtpof=true&sd=true)
+
 하나의 앱(**Go 방문 카운터**)을 1번부터 15번까지 한 단계씩 고도화하며 Docker 전반을 익히는 실습 시리즈입니다. 각 문제는 직전 단계의 불편함을 해결하는 방식으로 이어집니다.
 
 저는 여러분들께 이 실습을 AI 없이 최소 1번 해보라고 권장드립니다. 각 문제는 문제지와 해설지를 포함해놨습니다. 문제 풀면서 막히거나 어려우면 해설지를 보면서 진행해보세요.
