@@ -1,0 +1,42 @@
+# 02. 시작 순서 해법: healthcheck + depends_on condition
+#
+# 01과의 차이는 두 군데뿐이다.
+#   (1) db에 healthcheck 추가
+#   (2) app의 depends_on에 condition: service_healthy 지정
+
+services:
+  db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: appdb
+    healthcheck:
+      # MySQL 서버가 살아있는지 ping으로 확인한다
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpass"]
+      interval: 5s        # 5초마다 검사
+      timeout: 3s         # 응답이 3초 넘으면 실패로 간주
+      retries: 10         # 10번 연속 실패하면 unhealthy
+      start_period: 30s   # 시작 후 30초 동안의 실패는 retries에 카운트하지 않음
+                          # (MySQL 초기화 시간을 위한 유예 기간)
+    networks:
+      - problem2-net
+
+  app:
+    image: compose-practice-app
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: db
+      DB_PASSWORD: rootpass
+      DB_NAME: appdb
+    depends_on:
+      db:
+        condition: service_healthy   # [핵심] db의 healthcheck가 통과할 때까지
+                                     #        app 컨테이너 시작을 보류한다
+    restart: "no"
+    networks:
+      - problem2-net
+
+networks:
+  problem2-net:
+    driver: bridge

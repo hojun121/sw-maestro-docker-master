@@ -1,0 +1,41 @@
+# 03. compose가 빌드까지 — build: 지시어
+#
+# 02와의 차이는 한 군데뿐이다: app의 image: -> build: 전환.
+# 이제 "docker build"를 직접 칠 필요가 없다. compose가 빌드를 관장한다.
+
+services:
+  db:
+    image: mysql:8                  # DB는 여전히 공식 이미지를 받아서 쓴다 (빌드 대상 아님)
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: appdb
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    networks:
+      - problem3-net
+
+  app:
+    build:
+      context: ./app                # [핵심] 빌드 컨텍스트 (COPY의 기준 경로)
+      dockerfile: Dockerfile        # 기본값이지만 교육용으로 명시
+    image: compose-practice-app:3.0 # build 결과물에 붙일 이름표 (생략 시 {프로젝트명}-{서비스명})
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: db
+      DB_PASSWORD: rootpass
+      DB_NAME: appdb
+    depends_on:
+      db:
+        condition: service_healthy  # 02에서 배운 것은 그대로 유지
+    restart: "no"
+    networks:
+      - problem3-net
+
+networks:
+  problem3-net:
+    driver: bridge

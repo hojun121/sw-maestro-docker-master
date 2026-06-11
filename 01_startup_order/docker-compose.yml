@@ -1,0 +1,35 @@
+# 01. 시작 순서 문제 체험용 compose 파일
+#
+# [의도된 실패] 이 파일은 일부러 app이 crash 하도록 구성되어 있다.
+# - depends_on이 있어도 app은 실패한다 -> "시작 순서 보장 != 준비 완료 보장"
+# - restart: "no" 를 명시하여, crash 후 재시작으로 우연히 성공하는 것을 차단한다.
+
+services:
+  db:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: appdb
+    networks:
+      - problem1-net
+
+  app:
+    # 사전 단계에서 직접 빌드한 이미지를 사용한다. (03에서 build:로 대체된다)
+    #   docker build -t compose-practice-app ./app
+    image: compose-practice-app
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: db          # localhost가 아니라 "서비스 이름"이 hostname이다
+      DB_PASSWORD: rootpass
+      DB_NAME: appdb
+    depends_on:
+      - db                 # [함정] "db 컨테이너가 시작된 후" 만 보장한다.
+                           #        MySQL이 연결을 받을 준비가 됐는지는 모른다!
+    restart: "no"          # 기본값이지만 명시: crash loop로 문제를 은폐하지 않기 위함
+    networks:
+      - problem1-net
+
+networks:
+  problem1-net:
+    driver: bridge

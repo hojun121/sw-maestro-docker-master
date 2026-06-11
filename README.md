@@ -1,75 +1,78 @@
-# Docker 실습 15선 — 방문 카운터로 배우는 컨테이너
+# compose-app-db-practice
 
-[1. Docker 개요 - Linux Kernel & UnionFS PPT Link](https://docs.google.com/presentation/d/1ARTknok8VZFPt-EZl-39twW4jAqSPe5o/edit?usp=drive_link&ouid=106914655275977610500&rtpof=true&sd=true) 
+Docker Compose로 App + DB 2-Tier 구성을 띄우며 **시작 순서 제어**와 **빌드 통합**을 배우는 실습입니다. 각 문제는 "함정을 먼저 체험하고 → 원리를 이해하고 → 해법을 적용"하는 흐름으로 구성되어 있습니다.
 
-[2. Docker 활용 - 네트워크 및 Volume PPT Link](https://docs.google.com/presentation/d/1lOg2LuNjbiXeg0uVQlAzYt6w78iIxKdw/edit?usp=drive_link&ouid=106914655275977610500&rtpof=true&sd=true)
+## 사전 요구사항
 
-하나의 앱(**Go 방문 카운터**)을 1번부터 15번까지 한 단계씩 고도화하며 Docker 전반을 익히는 실습 시리즈입니다. 각 문제는 직전 단계의 불편함을 해결하는 방식으로 이어집니다.
+- Docker Engine + **Docker Compose v2** (플러그인)
+  - 확인: `docker compose version` → `Docker Compose version v2.x` 이상
+  - 이 실습의 모든 명령은 `docker-compose`(하이픈, v1)가 아니라 **`docker compose`**(공백, v2)를 사용합니다. v1은 EOL되었고 동작이 다를 수 있습니다.
+- 3000번 포트가 비어 있을 것
 
-저는 여러분들께 이 실습을 AI 없이 최소 1번 해보라고 권장드립니다. 각 문제는 문제지와 해설지를 포함해놨습니다. 문제 풀면서 막히거나 어려우면 해설지를 보면서 진행해보세요.
+## 구성
 
-해설지를 보는 경우, 왜 이렇게 구성하는지 설정하는지 나름대로 비판적으로 연구하고 찾아보면서 학습하시길 바랍니다.
+| 문제 | 주제 | 함정 체험 | 핵심 학습 |
+|---|---|---|---|
+| [01_startup_order](./01_startup_order/) | 시작 순서 문제 | `depends_on`이 있어도 app이 crash | 시작 순서 보장 ≠ 준비 완료 보장 |
+| [02_healthcheck](./02_healthcheck/) | 순서 제어 해법 | — (01의 해결) | `healthcheck` + `condition: service_healthy` |
+| [03_build](./03_build/) | compose가 빌드까지 | 코드 수정이 반영 안 됨 | `build:`, `--build`, 이미지 캐시 |
 
-Container 기술이 손에 익으면서 어떤 이슈가 발생해도 능숙하게 다룰수 있는 경지로 올라가고 싶다면 해설지 없이 풀 정도로 외우더라도 반복해서 진행해보시면 됩니다.
+**반드시 01 → 02 → 03 순서로 진행하세요.** 각 문제는 이전 문제의 compose 파일에서 최소한의 diff만 가집니다.
 
-처음엔 암기처럼 느껴지겠지만, 이 과정은 Container 기술과 명령어들이 손에 익히는 최고의 훈련 과정이라고 생각합니다.
+공통 스택: Node.js(Express + mysql2) 앱 + MySQL 8. 앱 코드는 세 문제 모두 동일합니다 — 문제와 해법은 전부 **compose 파일(인프라 정의)** 안에 있습니다.
 
-결코 쉬운 문제들이 아닙니다. 하지만 욕심내어 도전하고 정복하시길 바랍니다. 여러분 화이팅!!
+## 네트워크에 대하여
 
-아, 그리고 Container 실습 진행 환경은 Docker Container가 설치되어있는 Linux 환경이면 다 됩니다.
+각 문제는 자신만의 네트워크(`problem1-net`, `problem2-net`, `problem3-net`)를 명시적으로 정의합니다.
 
-> 환경: Ubuntu 24.04 / Docker 28.x 이상
+사실 compose는 네트워크를 정의하지 않아도 프로젝트(디렉토리)마다 default 네트워크를 자동 생성하므로, 폴더가 다르면 어차피 격리됩니다. 그럼에도 이 실습에서 명시적으로 정의하는 이유는 **compose가 뒤에서 해주던 일을 코드로 드러내고, 직접 눈으로 확인**하기 위해서입니다. 같은 네트워크에 속한 서비스들은 **서비스 이름을 hostname으로** 서로 통신할 수 있습니다 (앱이 `localhost`가 아니라 `db:3306`으로 접속하는 이유).
 
-## 폴더 구조
+## 네트워크 확인 명령어
 
-각 문제는 아래 두 디렉터리로 구성됩니다.
+각 문제의 `up` 직후 / `down` 직후에 아래 명령어로 네트워크의 생성과 삭제를 직접 확인해 보세요.
 
+```bash
+# 1. 네트워크 목록 — {프로젝트명}_{네트워크명} 형식으로 생성된다
+docker network ls
+# 예: 01_startup_order_problem1-net   bridge   local
+
+# 2. 특정 네트워크 상세 — 연결된 컨테이너, 서브넷, 게이트웨이 확인
+docker network inspect 01_startup_order_problem1-net
+
+# 3. 연결된 컨테이너와 IP만 추려서 보기
+docker network inspect 01_startup_order_problem1-net \
+  --format '{{range .Containers}}{{.Name}} -> {{.IPv4Address}}{{println}}{{end}}'
+
+# 4. 컨테이너 안에서 서비스 이름 DNS가 실제로 동작하는지 확인 (up 상태에서)
+docker compose exec app getent hosts db
+# 출력된 IP가 3번에서 본 db 컨테이너의 IP와 일치하는지 비교해 보자
+
+# 5. compose 프로젝트 관점에서 보기
+docker compose ps          # 실행 중인 서비스
+docker compose ps -a       # 종료된 컨테이너 포함 (01에서 Exited 확인용)
+
+# 6. down 후 네트워크가 함께 삭제되었는지 확인
+docker compose down
+docker network ls          # problem*-net이 사라졌는지 확인
+
+# 7. 쓰지 않는 네트워크 일괄 정리 (실습 종료 후)
+docker network prune
 ```
-NN-제목/
-├── Provocatio/      # 문제 — 먼저 직접 풀어보세요
-│   ├── README.md    #   상황 · 요구사항 · 검증
-│   └── app/         #   주어지는 소스 (수정 금지)
-└── Solutio/         # 해설 — 풀어본 뒤 열어보세요
-    └── README.md    #   정답 · 빌드/실행 · 개념 설명
+
+## 빠른 시작
+
+```bash
+git clone <this-repo>
+cd compose-app-db-practice/01_startup_order
+cat README.md   # 각 문제의 README를 따라 진행
 ```
 
-> 폴더명은 호환성을 위해 ASCII(`01-first-container` 등)로 두고, 한글 제목은 각 폴더의 README 안에 있습니다.
+## 정리(cleanup) 공통 규칙
 
-문서 안의 `{{ }}`는 **여러분이 직접 정해서 채우는 값**입니다. 예: `{{my-container}}` → `web`
+각 문제를 마칠 때마다:
 
-## 학습 로드맵
+```bash
+docker compose down    # 컨테이너 + 네트워크 삭제
+```
 
-두 개의 큰 서사가 시리즈를 관통합니다.
-- **무거운 이미지 → 경량화** (1번 → 5번)
-- **휘발성 → 영속성** (1번 → 10번 → 15번)
-
-| 국면 | 문제 | 한 줄 |
-|------|------|-------|
-| 패키징 기초 | 1–2 | 컨테이너로 띄우기 |
-| 빌드 최적화 | 3–5 | 이미지 가볍게 |
-| 운영·공유 | 6–7 | 디버깅과 배포 |
-| 네트워크 | 8–9 | 컨테이너 간 통신 |
-| 데이터 영속성 | 10–13 | 카운터 살리기 |
-| 리소스·캡스톤 | 14–15 | 한계와 종합 |
-
-## 문제 목록
-
-| # | 폴더 | 주제 |
-|---|------|------|
-| 1 | `01-first-container` | 첫 컨테이너 만들기 — 이미지 빌드, 포트 매핑, `exec -it` |
-| 2 | `02-cmd-entrypoint` | CMD vs ENTRYPOINT — 실행 인자 설계 |
-| 3 | `03-layer-cache` | 레이어 캐시 최적화 — `COPY` 순서로 빌드 단축 |
-| 4 | `04-dockerignore-run` | .dockerignore & RUN 통합 — 컨텍스트 정리, 용량 절감 |
-| 5 | `05-multi-stage` | Multi-stage build — distroless로 이미지 폭락 |
-| 6 | `06-debugging` | 컨테이너 디버깅 — logs · exec · inspect · cp |
-| 7 | `07-registry` | 레지스트리 push/pull — 이미지 naming과 공유 |
-| 8 | `08-bridge-network` | user-defined bridge — 이름으로 컨테이너 연결 |
-| 9 | `09-port-binding` | 포트 매핑 & 바인딩 보안 — `-p`의 동작과 오해 |
-| 10 | `10-named-volume` | named volume 영속화 — 카운터 숫자 살려두기 |
-| 11 | `11-bind-mount` | bind mount 설정 주입 — 호스트 파일로 설정 교체 |
-| 12 | `12-volume-backup` | 볼륨 백업/복원 — tar로 데이터 이관 |
-| 13 | `13-permissions` | 권한(UID/GID) 트러블슈팅 — permission denied |
-| 14 | `14-resource-limits` | 리소스 제한(cgroups) — `--memory`/`--cpus`와 OOM |
-| 15 | `15-capstone-3tier` | 캡스톤 — 3-tier 스택 수동 조립 |
-
-> 1번부터 15번까지 모두 포함되어 있습니다. 번호 순서대로 풀어보세요 — 각 문제는 앞 문제의 결과 위에서 이어집니다.
+다음 문제로 넘어가기 전에 반드시 이전 문제를 `down` 하세요. 세 문제 모두 호스트의 3000번 포트를 사용하므로 동시에 띄우면 충돌합니다.
